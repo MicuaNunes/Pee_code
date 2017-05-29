@@ -1,5 +1,6 @@
 from tools import *
 
+#imports used by sensors group
 import threading
 import RPi.GPIO as GPIO 
 from time import sleep, strftime, time, gmtime
@@ -50,37 +51,38 @@ fifo_datatosend = Queue.Queue()
 global fifo_datafailed
 fifo_datafailed = Queue.Queue()
 
+#make sure the log file exists
 f=open("/home/pi/Desktop/log.csv",'a')
 f.close()
 
-
+#fifo_datatosend line counter
 j=0
+#log.csv line counter
 k=0
 
 def sendValues():
 	global t,h, fifo_datatosend, fifo_datafailed, k
 	while True:
-		print "thread" 
+	print "thread" 
 		
-	 #if connection is sucessfull it sends the data directly, if not (error catched) it saves it to the file log.csv  
+	 #if connection is sucessfull it sends the data directly, 
 		try:
 			#executes the connection to the database
 			db = MySQLdb.connect(host="193.136.175.118", user = "pee", passwd = "pee#pp", db = "pee")
 			cur = db.cursor()
 			print("Connection successfull")
-
+						#if fifo with data failed to send isn't empty it sends that data first
                         if fifo_datafailed.empty() is False:
                                 row = fifo_datafailed.get()
                                 col1,col2,col3,col4 = row.split(",")
                                 cur.execute("INSERT INTO containerenvironment VALUES(NUll,1,%s,%s,Null,%s)",(col1,col2,col3))
-				db.commit()
-				
-			elif k <= j:
+								db.commit()
+						#if fifo_datatosend has more lines than log.csv there is information that needs to be sended
+						elif k <= j:
                                 row = fifo_datatosend.get()
                                 col1,col2,col3,col4 = row.split(",")
 				cur.execute("INSERT INTO containerenvironment VALUES(NUll,1,%s,%s,Null,%s)",(col1,col2,col3))
-				db.commit()
-                                
+				db.commit()                                
 				#cur.execute("INSERT INTO containerdoor VALUES(NULL,1,%s,%s)",(col4,col3))
 				#db.commit()
 				db.close()
@@ -89,45 +91,40 @@ def sendValues():
 			f.write(row)
 			f.flush()
 			f.close()
-                except MySQLdb.OperationalError:
+        #handler: when ther are problems connecting to database
+        except MySQLdb.OperationalError:
 			print("Connection unsucessfull")		
 			fifo_datafailed.put(row)
 			sleep(2)
+		#handler: when no connection is detected
 		except MySQLdb.IntegrityError:
 			print("Connection lost")
-			fifo.put(row)
+			fifo_datafailed.put(row)
 			sleep(2)
-                except KeyboardInterrupt:
-                        exit
+        #handler: assures that "C" key interrupts the code
+        except KeyboardInterrupt:
+            exit
 		
 	sleep(3)
 	return
-
+#thread inicialization
 threads = []
 th = threading.Thread(target=sendValues)
 threads.append(th)
 th.start()	
-	
-
-
-
 
 while True:
   
-  #gets sensors value
-	
-	
-	
+  	#gets sensors value with a x seconds pause and sends the info to fifo_datatosend
 	print "Estou aqui"
 	
 	t = round(sense.get_temperature(), 1)
 	h = round(sense.get_humidity(), 1)
-   
-   
+      
 	now = strftime("%Y-%m-%d %H:%M:%S", gmtime())
 	msg = "%.1f,%.1f,%s,%s\n" % (t, h, now, door_closed)
 	fifo_datatosend.put(msg)
 	j = j+1
 	print k
 	print j
-	#sleep(10) #delay(seconds)  
+	sleep(10) #delay(seconds)  
